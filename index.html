@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON VOID: BOSS EDITION</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        *{margin:0;padding:0;box-sizing:border-box;user-select:none}
+        body{background:#0a0a0f;overflow:hidden;font-family:'Orbitron',monospace;color:#fff}
+        
+        /* YouTube Player Hidden Behind Canvas */
+        #yt-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;z-index:-1}
+        
+        canvas{display:block;position:relative;z-index:1}
+        
+        #ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;display:flex;flex-direction:column;justify-content:space-between;padding:20px}
+        .hud-top{display:flex;justify-content:space-between;align-items:flex-start}
+        .score-label{font-size:11px;color:#0ff;opacity:.8;letter-spacing:2px}
+        .score-val{font-size:32px;font-weight:900;text-shadow:0 0 20px #0ff}
+        
+        .boss-hud{position:absolute;top:60px;left:50%;transform:translateX(-50%);text-align:center;display:none;z-index:11}
+        .boss-name{font-size:14px;color:#f0f;letter-spacing:3px;margin-bottom:5px;text-shadow:0 0 10px #f0f}
+        .boss-hp-bg{width:300px;height:10px;background:rgba(255,0,255,.2);border-radius:5px;overflow:hidden;border:1px solid rgba(255,0,255,.4)}
+        .boss-hp-fill{height:100%;background:linear-gradient(90deg,#f0f,#f44);width:100%;transition:width .15s;box-shadow:0 0 15px #f0f}
+        .phase-ind{font-size:10px;color:#ff0;margin-top:4px;letter-spacing:2px}
+        
+        .screen{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,10,15,.92);backdrop-filter:blur(5px);pointer-events:auto;transition:opacity .3s;z-index:20}
+        .screen.hidden{opacity:0;pointer-events:none}
+        h1{font-size:52px;font-weight:900;letter-spacing:6px;background:linear-gradient(180deg,#0ff,#f0f);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px;text-align:center}
+        .sub{font-size:13px;color:#888;letter-spacing:4px;margin-bottom:40px}
+        .btn{padding:16px 45px;font-family:'Orbitron',monospace;font-size:16px;font-weight:700;color:#0a0a0f;background:#0ff;border:none;cursor:pointer;letter-spacing:3px;text-transform:uppercase;clip-path:polygon(10px 0,100% 0,calc(100% - 10px) 100%,0 100%);transition:all .2s;margin:5px}
+        .btn:hover{background:#fff;transform:scale(1.05);box-shadow:0 0 30px #0ff}
+        .controls{margin-top:30px;font-size:11px;color:#555;letter-spacing:2px;text-align:center;line-height:2.2}
+        .key{display:inline-block;padding:2px 8px;border:1px solid #444;border-radius:3px;color:#aaa;margin:0 2px}
+        .go-score{font-size:44px;font-weight:900;color:#f0f;text-shadow:0 0 30px #f0f;margin:15px 0}
+        .go-label{font-size:13px;color:#888;letter-spacing:3px}
+        .scanlines{position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.08) 2px,rgba(0,0,0,.08) 4px);pointer-events:none;z-index:100}
+        .warning{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;color:#f44;letter-spacing:6px;text-shadow:0 0 30px #f44;display:none;animation:wp .5s infinite;z-index:15;text-align:center}
+        @keyframes wp{0%,100%{opacity:1}50%{opacity:.3}}
+        .music-note{position:absolute;bottom:15px;right:15px;font-size:10px;color:#444;letter-spacing:1px;z-index:11}
+    </style>
+</head>
+<body>
+
+<!-- Hidden YouTube Player -->
+<div id="yt-container"></div>
+
+<canvas id="c"></canvas>
+<div class="scanlines"></div>
+<div class="warning" id="warn">⚠ BOSS APPROACHING ⚠</div>
+
+<div id="ui">
+    <div class="hud-top">
+        <div><div class="score-label">SCORE</div><div class="score-val" id="sEl">0</div></div>
+        <div style="text-align:right"><div class="score-label">ARENA</div><div class="score-val" id="lEl" style="font-size:20px;color:#ff0">3 LANES</div></div>
+    </div>
+    <div class="boss-hud" id="bHud">
+        <div class="boss-name" id="bName">???</div>
+        <div class="boss-hp-bg"><div class="boss-hp-fill" id="bHp"></div></div>
+        <div class="phase-ind" id="bPhase">PHASE 1/5</div>
+    </div>
+</div>
+<div class="music-note">🎵 YouTube Audio Loop Active</div>
+
+<div class="screen" id="startScr">
+    <h1>NEON VOID</h1>
+    <div class="sub">BOSS EDITION</div>
+    <button class="btn" id="startBtn">START RUN</button>
+    <div class="controls">
+        <span class="key">←</span><span class="key">→</span> / <span class="key">A</span><span class="key">D</span> Move<br>
+        <span class="key">SPACE</span> Dash<br>
+        🎧 Klik START untuk mengaktifkan musik
+    </div>
+</div>
+
+<div class="screen hidden" id="goScr">
+    <div class="go-label">SYSTEM FAILURE</div>
+    <div class="go-score" id="fScore">0</div>
+    <div class="go-label" style="margin-bottom:25px">FINAL SCORE</div>
+    <button class="btn" onclick="startGame()">RETRY</button>
+</div>
+
+<script>
+// =============================================
+// 🎵 YOUTUBE AUDIO INTEGRATION
+// =============================================
+const YT_VIDEO_ID = 'oJuGlqO85YI';
+let ytPlayer = null;
+
+// Load YouTube IFrame API
+const tag = document.createElement('script');
+tag.src = "https://www.youtube.com/iframe_api";
+document.head.appendChild(tag);
+
+function onYouTubeIframeAPIReady() {
+    ytPlayer = new YT.Player('yt-container', {
+        height: '1', width: '1',
+        videoId: YT_VIDEO_ID,
+        playerVars: {
+            autoplay: 0, loop: 1, controls: 0, disablekb: 1,
+            fs: 0, modestbranding: 1, rel: 0, iv_load_policy: 3
+        },
+        events: { onReady: () => console.log('YT Ready') }
+    });
+}
+
+function playMusic() {
+    if(ytPlayer && ytPlayer.playVideo) {
+        ytPlayer.playVideo();
+        // Loop hack: YouTube loop param kadang tidak work untuk single video
+        // Kita cek setiap detik dan replay jika selesai
+        setInterval(() => {
+            if(ytPlayer && ytPlayer.getPlayerState() === YT.PlayerState.ENDED) {
+                ytPlayer.seekTo(0, true);
+                ytPlayer.playVideo();
+            }
+        }, 1000);
+    }
+}
+
+// =============================================
+// 🎮 GAME ENGINE
+// =============================================
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;player.y=H-140}
+addEventListener('resize',resize);resize();
+
+// State
+let state='MENU',score=0,speed=5,frame=0,gridOff=0;
+let lanes=3,laneW=120,dashCD=0,isDashing=false;
+let shakeX=0,shakeY=0,shakeDur=0;
+let bossActive=false,bossPhase=0,bossHp=0,bossMaxHp=0;
+let bossAttackTimer=0,bossPattern=[];
+let warningTimer=0;
+
+// Entities
+const player={x:0,y:0,w:26,h:26,lane:1,targetX:0,color:'#0ff'};
+let obstacles=[],particles=[],stars=[],bossProjectiles=[];
+
+// Boss Definitions (5 Phases)
+const BOSSES = [
+    {name:"METEOR KING",lanes:3,hp:800,desc:"Meteor Radius 3 Panel"},
+    {name:"VOID SERPENT",lanes:5,hp:1200,desc:"Sine Wave Barrage"},
+    {name:"GRID OVERLORD",lanes:7,hp:1800,desc:"Full Area Sweep"},
+    {name:"CHAOS ENGINE",lanes:10,hp:2500,desc:"Random Multi-Zone"},
+    {name:"OMEGA CORE",lanes:10,hp:3500,desc:"All Patterns Combined"}
+];
+
+// Input
+const keys={};
+addEventListener('keydown',e=>{
+    keys[e.code]=true;
+    if(state==='PLAYING'){
+        if((e.code==='ArrowLeft'||e.code==='KeyA')&&player.lane>0){player.lane--;spawnTrail(player.x,player.y,'#0ff',5)}
+        if((e.code==='ArrowRight'||e.code==='KeyD')&&player.lane<lanes-1){player.lane++;spawnTrail(player.x,player.y,'#0ff',5)}
+        if(e.code==='Space'&&dashCD<=0){isDashing=true;dashCD=120;speed=Math.min(speed+10,35);spawnTrail(player.x,player.y,'#fff',20);setTimeout(()=>isDashing=false,300)}
+    }
+});
+addEventListener('keyup',e=>keys[e.code]=false);
+
+// Start Game
+function startGame(){
+    initAudioContext(); // Unlock audio
+    playMusic();
+    
+    state='PLAYING';score=0;speed=5;frame=0;
+    lanes=3;laneW=getLaneWidth();
+    player.lane=Math.floor(lanes/2);
+    obstacles=[];particles=[];bossProjectiles=[];
+    dashCD=0;bossActive=false;bossPhase=0;
+    warningTimer=0;
+    
+    document.getElementById('startScr').classList.add('hidden');
+    document.getElementById('goScr').classList.add('hidden');
+    document.getElementById('bHud').style.display='none';
+    document.getElementById('warn').style.display='none';
+    
+    stars=[];for(let i=0;i<100;i++)stars.push({x:Math.random()*W,y:Math.random()*H,s:Math.random()*2,sp:Math.random()*2+.5});
+}
+
+function getLaneWidth(){return Math.min(120, (W*0.8)/lanes)}
+
+function gameOver(){
+    state='GAMEOVER';
+    if(score>parseInt(localStorage.getItem('nvBossHS')||'0'))localStorage.setItem('nvBossHS',score);
+    document.getElementById('fScore').innerText=score.toLocaleString();
+    document.getElementById('goScr').classList.remove('hidden');
+    spawnExplosion(player.x,player.y,'#f0f',50);
+}
+
+// =============================================
+// 👾 BOSS SYSTEM
+// =============================================
+function triggerBoss(phase){
+    bossActive=true;
+    bossPhase=phase;
+    const b=BOSSES[phase];
+    bossMaxHp=b.hp;bossHp=b.hp;
+    lanes=b.lanes;laneW=getLaneWidth();
+    player.lane=Math.floor(lanes/2);
+    bossAttackTimer=0;
+    
+    // Show warning first
+    const warn=document.getElementById('warn');
+    warn.innerText=`⚠ ${b.name} ⚠`;
+    warn.style.display='block';
+    shakeScreen(20);
+    
+    setTimeout(()=>{
+        warn.style.display='none';
+        document.getElementById('bHud').style.display='block';
+        document.getElementById('bName').innerText=b.name;
+        document.getElementById('bPhase').innerText=`PHASE ${phase+1}/5 — ${b.desc}`;
+        updateBossHP();
+    },2000);
+}
+
+function updateBossHP(){
+    const pct=Math.max(0,(bossHp/bossMaxHp)*100);
+    document.getElementById('bHp').style.width=pct+'%';
+}
+
+function bossAI(){
+    if(!bossActive)return;
+    bossAttackTimer++;
+    const b=BOSSES[bossPhase];
+    const attackRate=Math.max(20,60-bossPhase*8);
+    
+    if(bossAttackTimer%attackRate===0){
+        switch(bossPhase){
+            case 0: // METEOR KING: Meteor radius 3 panel
+                meteorAttack();break;
+            case 1: // VOID SERPENT: Sine wave barrage
+                sineWaveAttack();break;
+            case 2: // GRID OVERLORD: Full area sweep with safe zone
+                sweepAttack();break;
+            case 3: // CHAOS ENGINE: Random multi-zone (4-10 lanes)
+                chaosAttack();break;
+            case 4: // OMEGA CORE: All patterns combined
+                omegaAttack();break;
+        }
+    }
+}
+
+function meteorAttack(){
+    // Drop 3 meteors covering adjacent lanes
+    const center=Math.floor(Math.random()*lanes);
+    for(let i=-1;i<=1;i++){
+        const l=center+i;
+        if(l>=0&&l<lanes){
+            bossProjectiles.push({
+                x:getLaneX(l),y:-80,w:50,h:50,
+                vy:speed*1.5,type:'meteor',color:'#f44',
+                warning:true,warnTimer:40
+            });
+        }
+    }
+}
+
+function sineWaveAttack(){
+    // Projectiles that move in sine wave across lanes
+    for(let i=0;i<3;i++){
+        bossProjectiles.push({
+            x:getLaneX(Math.floor(lanes/2)),y:-60-i*40,w:30,h:30,
+            vy:speed*1.2,type:'sine',color:'#f0f',
+            sineOffset:i*2,sineAmp:laneW*1.5,baseX:getLaneX(Math.floor(lanes/2))
+        });
+    }
+}
+
+function sweepAttack(){
+    // Fill ALL lanes except 1-2 safe zones
+    const safe1=Math.floor(Math.random()*lanes);
+    let safe2=(safe1+Math.floor(lanes/2))%lanes;
+    for(let i=0;i<lanes;i++){
+        if(i!==safe1&&i!==safe2){
+            bossProjectiles.push({
+                x:getLaneX(i),y:-100,w:laneW*0.8,h:60,
+                vy:speed*1.8,type:'sweep',color:'#fa0'
+            });
+        }
+    }
+    shakeScreen(5);
+}
+
+function chaosAttack(){
+    // Random projectiles in rapid succession
+    const count=3+Math.floor(Math.random()*4);
+    for(let i=0;i<count;i++){
+        const l=Math.floor(Math.random()*lanes);
+        bossProjectiles.push({
+            x:getLaneX(l),y:-60-i*30,w:35,h:35,
+            vy:speed*(1+Math.random()),type:'chaos',color:'#f4f'
+        });
+    }
+}
+
+function omegaAttack(){
+    // Combine all patterns randomly
+    const pattern=Math.floor(Math.random()*4);
+    if(pattern===0)meteorAttack();
+    else if(pattern===1)sineWaveAttack();
+    else if(pattern===2)sweepAttack();
+    else chaosAttack();
+}
+
+function getLaneX(lane){
+    const totalW=lanes*laneW;
+    const startX=(W-totalW)/2;
+    return startX+lane*laneW+laneW/2;
+}
+
+// =============================================
+// PARTICLES & EFFECTS
+// =============================================
+function spawnTrail(x,y,color,count){
+    for(let i=0;i<count;i++)particles.push({x:x+(Math.random()-.5)*20,y:y+(Math.random()-.5)*20,vx:(Math.random()-.5)*4,vy:(Math.random()-.5)*4+2,life:1,decay:.02+Math.random()*.03,size:Math.random()*4+1,color:color});
+}
+function spawnExplosion(x,y,color,count){
+    for(let i=0;i<count;i++)particles.push({x:x,y:y,vx:(Math.random()-.5)*12,vy:(Math.random()-.5)*12,life:1,decay:.01+Math.random()*.02,size:Math.random()*6+2,color:color});
+}
+function shakeScreen(dur){shakeDur=dur}
+
+// =============================================
+// MAIN LOOP
+// =============================================
+function update(){
+    if(state!=='PLAYING')return;
+    frame++;
+    laneW=getLaneWidth();
+    
+    // Speed progression
+    if(!isDashing&&speed<25)speed+=0.003;
+    if(dashCD>0){dashCD--;if(!isDashing&&speed>5+(frame*.003))speed-=.3}
+    
+    score+=Math.floor(speed);
+    gridOff=(gridOff+speed)%80;
+    
+    // Player smooth movement
+    player.targetX=getLaneX(player.lane);
+    player.x+=(player.targetX-player.x)*.15;
+    
+    // Boss trigger thresholds
+    if(!bossActive){
+        if(score>3000&&bossPhase===0)triggerBoss(0);
+        else if(score>8000&&bossPhase===1)triggerBoss(1);
+        else if(score>15000&&bossPhase===2)triggerBoss(2);
+        else if(score>25000&&bossPhase===3)triggerBoss(3);
+        else if(score>40000&&bossPhase===4)triggerBoss(4);
+    }
+    
+    // Regular obstacles (only when no boss)
+    if(!bossActive){
+        const rate=Math.max(20,60-Math.floor(speed*1.5));
+        if(frame%rate===0){
+            const l=Math.floor(Math.random()*lanes);
+            obstacles.push({x:getLaneX(l),y:-80,w:35,h:35,color:Math.random()>.7?'#f0f':'#f44'});
+        }
+    }
+    
+    // Update obstacles
+    for(let i=obstacles.length-1;i>=0;i--){
+        const o=obstacles[i];o.y+=speed;
+        const dx=player.x-o.x,dy=player.y-o.y;
+        if(Math.sqrt(dx*dx+dy*dy)<(player.w/2+o.w/2)&&!isDashing){gameOver();return}
+        if(o.y>H+100)obstacles.splice(i,1);
+    }
+    
+    // Boss AI & Projectiles
+    bossAI();
+    for(let i=bossProjectiles.length-1;i>=0;i--){
+        const p=bossProjectiles[i];
+        
+        // Warning phase (don't move yet)
+        if(p.warning){
+            p.warnTimer--;
+            if(p.warnTimer<=0)p.warning=false;
+            continue;
+        }
+        
+        p.y+=p.vy;
+        if(p.type==='sine'){
+            p.x=p.baseX+Math.sin((p.y+p.sineOffset)*0.02)*p.sineAmp;
+        }
+        
+        // Collision
+        const dx=player.x-p.x,dy=player.y-p.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<(player.w/2+p.w/2)&&!isDashing){
+            // During boss, hitting projectile damages boss instead of killing player
+            // But only if dashing. Otherwise player dies.
+            if(isDashing){
+                bossHp-=50;updateBossHP();
+                spawnExplosion(p.x,p.y,p.color,10);
+                bossProjectiles.splice(i,1);
+                if(bossHp<=0){
+                    bossActive=false;bossPhase++;
+                    spawnExplosion(W/2,H/3,'#f0f',80);
+                    shakeScreen(30);
+                    document.getElementById('bHud').style.display='none';
+                    // Reset to normal lanes after boss
+                    lanes=3;laneW=getLaneWidth();
+                    player.lane=Math.floor(lanes/2);
+                }
+                continue;
+            } else {
+                gameOver();return;
+            }
+        }
+        
+        if(p.y>H+100)bossProjectiles.splice(i,1);
+    }
+    
+    // Particles
+    for(let i=particles.length-1;i>=0;i--){
+        const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.life-=p.decay;
+        if(p.life<=0)particles.splice(i,1);
+    }
+    
+    // Stars
+    stars.forEach(s=>{s.y+=s.sp*(speed/5);if(s.y>H){s.y=0;s.x=Math.random()*W}});
+    
+    // Trail
+    if(frame%3===0)spawnTrail(player.x,player.y+15,isDashing?'#fff':'#0ff',1);
+    
+    // Shake decay
+    if(shakeDur>0){shakeX=(Math.random()-.5)*shakeDur;shakeY=(Math.random()-.5)*shakeDur;shakeDur*=.9;if(shakeDur<.5)shakeDur=0}else{shakeX=shakeY=0}
+    
+    // HUD update
+    document.getElementById('sEl').innerText=score.toLocaleString();
+    document.getElementById('lEl').innerText=lanes+' LANES';
+}
+
+function draw(){
+    ctx.fillStyle='rgba(10,10,15,0.3)';
+    ctx.fillRect(0,0,W,H);
+    
+    ctx.save();
+    ctx.translate(shakeX,shakeY);
+    
+    // Stars
+    stars.forEach(s=>{ctx.fillStyle=`rgba(255,255,255,${.3+Math.random()*.3})`;ctx.fillRect(s.x,s.y,s.s,s.s)});
+    
+    // Grid
+    const cx=W/2,horizon=H*.3;
+    ctx.strokeStyle='rgba(0,255,255,0.08)';ctx.lineWidth=1;
+    for(let i=-Math.ceil(lanes/2)-2;i<=Math.ceil(lanes/2)+2;i++){
+        ctx.beginPath();ctx.moveTo(cx+i*laneW,H);ctx.lineTo(cx+i*15,horizon);ctx.stroke();
+    }
+    for(let i=0;i<15;i++){
+        const y=horizon+((i*80+gridOff)/(H-horizon))*(H-horizon);
+        if(y>H)continue;
+        ctx.globalAlpha=((y-horizon)/(H-horizon))*.25;
+        ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    
+    // Lane markers
+    ctx.strokeStyle='rgba(255,0,255,0.12)';ctx.lineWidth=2;
+    for(let l=0;l<lanes;l++){
+        const lx=getLaneX(l);
+        ctx.beginPath();ctx.moveTo(lx-laneW*.4,H);ctx.lineTo(lx-5,horizon);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(lx+laneW*.4,H);ctx.lineTo(lx+5,horizon);ctx.stroke();
+    }
+    
+    // Obstacles
+    obstacles.forEach(o=>{
+        ctx.shadowBlur=15;ctx.shadowColor=o.color;ctx.fillStyle=o.color;
+        ctx.beginPath();ctx.moveTo(o.x,o.y-o.h/2);ctx.lineTo(o.x+o.w/2,o.y);ctx.lineTo(o.x,o.y+o.h/2);ctx.lineTo(o.x-o.w/2,o.y);ctx.closePath();ctx.fill();
+        ctx.shadowBlur=0;
+    });
+    
+    // Boss Projectiles
+    bossProjectiles.forEach(p=>{
+        if(p.warning){
+            // Warning indicator
+            ctx.globalAlpha=.3+Math.sin(frame*.3)*.3;
+            ctx.fillStyle=p.color;
+            ctx.fillRect(p.x-p.w/2,p.y-p.h/2,p.w,p.h);
+            ctx.globalAlpha=1;
+            return;
+        }
+        ctx.shadowBlur=20;ctx.shadowColor=p.color;ctx.fillStyle=p.color;
+        if(p.type==='meteor'){
+            ctx.beginPath();ctx.arc(p.x,p.y,p.w/2,0,Math.PI*2);ctx.fill();
+        }else if(p.type==='sweep'){
+            ctx.fillRect(p.x-p.w/2,p.y-p.h/2,p.w,p.h);
+        }else{
+            ctx.beginPath();ctx.moveTo(p.x,p.y-p.h/2);ctx.lineTo(p.x+p.w/2,p.y+p.h/2);ctx.lineTo(p.x-p.w/2,p.y+p.h/2);ctx.closePath();ctx.fill();
+        }
+        ctx.shadowBlur=0;
+    });
+    
+    // Player
+    if(state==='PLAYING'){
+        ctx.shadowBlur=isDashing?30:20;ctx.shadowColor=isDashing?'#fff':player.color;ctx.fillStyle=isDashing?'#fff':player.color;
+        ctx.beginPath();ctx.moveTo(player.x,player.y-player.h/2);ctx.lineTo(player.x+player.w/2,player.y+player.h/2);ctx.lineTo(player.x,player.y+player.h/3);ctx.lineTo(player.x-player.w/2,player.y+player.h/2);ctx.closePath();ctx.fill();
+        ctx.shadowBlur=0;
+    }
+    
+    // Particles
+    particles.forEach(p=>{ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size)});
+    ctx.globalAlpha=1;
+    
+    ctx.restore();
+}
+
+function loop(){update();draw();requestAnimationFrame(loop)}
+
+// Audio context unlock (needed for browsers)
+function initAudioContext(){
+    // This just unlocks the audio context; actual music is via YouTube
+    const ac=new(window.AudioContext||window.webkitAudioContext)();
+    ac.resume();
+}
+
+// Init
+document.getElementById('startBtn').addEventListener('click',startGame);
+loop();
+</script>
+</body>
+</html>
